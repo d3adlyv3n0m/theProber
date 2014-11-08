@@ -1,0 +1,73 @@
+#!/usr/bin/python
+#
+# theProber
+#
+# script to pull wireless device probes from the air,
+# lookup the vendor mac address, and display the AP they're
+# probing for
+#
+# created by d3adlyv3n0m 
+############################################################
+
+# disable ipv6 route warning from scapy
+import logging
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+
+import re
+import sys
+from scapy.all import *
+
+# define mac address prefix file borrowed from nmap
+# thanks to Ed Skoudis for this tip
+mac_db = 'mac-prefixes'
+
+# open output file
+outfile = open('/tmp/Probes.txt', 'wb')
+
+# function to lookup a mac address
+def mac_vendor(macaddr):
+    vendor = macaddr[0:8]
+    vendor = vendor.replace(':','')
+    vendor = vendor.upper()
+    mac_vendor = open(mac_db, 'r')
+    for mac in mac_vendor.readlines():
+        if vendor in mac:
+            fnd_mac = re.sub(vendor + ' ','',mac)
+            fnd_mac = fnd_mac.strip('\n')
+            return fnd_mac
+
+# function to grab the client probes and store them
+# in our list
+def clientprober(pkt):
+    try:
+        if pkt.haslayer(Dot11):
+            if pkt.type == 0 and pkt.subtype == 4:
+                if pkt.info:
+                    vendor = mac_vendor(pkt.addr2)
+                    if vendor != None:
+                        print '     WIFI DEVICE: %s  (%s)\nPROBING FOR SSID: %s\n' % (pkt.addr2, vendor, pkt.info)
+                        outfile.write('     WIFI DEVICE: %s  (%s)\nPROBING FOR SSID: %s\n\n' % (pkt.addr2, vendor, pkt.info))
+                    else:
+                        print '     WIFI DEVICE: %s\nPROBING FOR SSID: %s\n' % (pkt.addr2, pkt.info)
+                        outfile.write('     WIFI DEVICE: %s  (%s)\nPROBING FOR SSID: %s\n\n' % (pkt.addr2, vendor, pkt.info))
+    except Exception as e:
+        print 'Error occurred attempting to catch probes: ' + str(e)
+        sys.exit(0)
+
+# main function
+def main():
+    # get options from command-line
+    if len(sys.argv) != 2:
+        print 'USAGE: theProber <interface>'
+        sys.exit(0)
+    else:
+        iface = sys.argv[1]
+
+    # start sniffing
+    print 'SNIFFER STARTED [CTRL-C] TO STOP'
+    print 'WRITING OUTPUT TO: /tmp/Probes.txt\n'
+    sniff(iface=iface, prn=clientprober)
+    outfile.close()
+
+if __name__ == '__main__':
+    main()
